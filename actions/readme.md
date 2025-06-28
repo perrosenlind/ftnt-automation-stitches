@@ -40,10 +40,10 @@ Conversely, `%%results%%` requires an input from a previous action that returns 
 }
 ```
 
-`%%results.result.port1.ip%%` returns `10.10.10.15`
-`%%results.result.port1.allowaccess%%` returns `https`
-`%%results.x%%` returns example content `x`
-`%%results[set_ip].y%%` returns the value of property `y` from a previous action called `set_ip`
-`%%results.speeds.1%%` returns the item in the array index 1 from the array `speeds`
+- `%%results.result.port1.ip%%` returns `10.10.10.15`
+- `%%results.result.port1.allowaccess%%` returns `https`
+- `%%results.x%%` returns example content `x`
+- `%%results[set_ip].y%%` returns the value of property `y` from a previous action called `set_ip`
+- `%%results.speeds.1%%` returns the item in the array index 1 from the array `speeds`
 
 

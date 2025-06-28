@@ -1,0 +1,249 @@
+name: Combine Configuration Files
+
+on:
+  push:
+    paths:
+      - 'actions/**/*.conf'
+      - 'actions/**/*.config'
+      - 'actions/**/*.cfg'
+  pull_request:
+    paths:
+      - 'actions/**/*.conf'
+      - 'actions/**/*.config'
+      - 'actions/**/*.cfg'
+  workflow_dispatch:
+
+jobs:
+  combine-config-files:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: Create actions folder if it doesn't exist
+      run: |
+        mkdir -p actions
+        echo "Actions folder ready"
+        
+    - name: Scan for configuration files
+      id: scan
+      run: |
+        echo "Scanning for configuration files in actions folder..."
+        
+        # Count configuration files (excluding the combined file)
+        conf_count=$(find actions -name "*.conf" -o -name "*.config" -o -name "*.cfg" 2>/dev/null | grep -v "actions/COMBINED_CONFIG.conf" | wc -l)
+        echo "Found $conf_count configuration files"
+        echo "conf_count=$conf_count" >> $GITHUB_OUTPUT
+        
+        # List all found files
+        echo "Configuration files found:"
+        find actions -name "*.conf" -o -name "*.config" -o -name "*.cfg" 2>/dev/null | grep -v "actions/COMBINED_CONFIG.conf" | sort || echo "No configuration files found"
+        
+    - name: Generate combined configuration file
+      if: steps.scan.outputs.conf_count > 0
+      run: |
+        output_file="actions/COMBINED_CONFIG.conf"
+        
+        # Header with metadata
+        echo "# ============================================================================" > "$output_file"
+        echo "# COMBINED CONFIGURATION FILE" >> "$output_file"
+        echo "# ============================================================================" >> "$output_file"
+        echo "#" >> "$output_file"
+        echo "# Repository: ${{ github.repository }}" >> "$output_file"
+        echo "# Branch: ${{ github.ref_name }}" >> "$output_file"
+        echo "# Generated: $(date '+%Y-%m-%d %H:%M:%S UTC')" >> "$output_file"
+        echo "# Commit: ${{ github.sha }}" >> "$output_file"
+        echo "# Total Config Files: ${{ steps.scan.outputs.conf_count }}" >> "$output_file"
+        echo "#" >> "$output_file"
+        echo "# This file contains all configuration files found in the actions/ directory." >> "$output_file"
+        echo "# Configuration files are automatically combined whenever changes are detected." >> "$output_file"
+        echo "#" >> "$output_file"
+        echo "# IMPORTANT: This file is auto-generated. Do not edit manually!" >> "$output_file"
+        echo "# ============================================================================" >> "$output_file"
+        echo "" >> "$output_file"
+        
+        # Table of contents as comments
+        echo "# TABLE OF CONTENTS:" >> "$output_file"
+        echo "#" >> "$output_file"
+        file_counter=1
+        find actions -name "*.conf" -o -name "*.config" -o -name "*.cfg" 2>/dev/null | grep -v "actions/COMBINED_CONFIG.conf" | sort | while read file; do
+          filename=$(basename "$file")
+          echo "# $file_counter. $filename - $file" >> "$output_file"
+          file_counter=$((file_counter + 1))
+        done
+        echo "#" >> "$output_file"
+        echo "# ============================================================================" >> "$output_file"
+        echo "" >> "$output_file"
+        
+        # Process each configuration file
+        find actions -name "*.conf" -o -name "*.config" -o -name "*.cfg" 2>/dev/null | grep -v "actions/COMBINED_CONFIG.conf" | sort | while read file; do
+          filename=$(basename "$file")
+          relative_path="$file"
+          file_size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file" 2>/dev/null || echo "unknown")
+          last_modified=$(stat -f%Sm "$file" 2>/dev/null || stat -c%y "$file" 2>/dev/null || echo "unknown")
+          
+          # Count lines after filtering
+          filtered_lines=$(grep -v '^[[:space:]]*#' "$file" | grep -v '^[[:space:]]*$' | wc -l)
+          original_lines=$(wc -l < "$file")
+          
+          echo "# ============================================================================" >> "$output_file"
+          echo "# FILE: $filename" >> "$output_file"
+          echo "# ============================================================================" >> "$output_file"
+          echo "#" >> "$output_file"
+          echo "# File Path: $relative_path" >> "$output_file"
+          echo "# File Size: $file_size bytes" >> "$output_file"
+          echo "# Last Modified: $last_modified" >> "$output_file"
+          echo "# Original Lines: $original_lines" >> "$output_file"
+          echo "# Filtered Lines: $filtered_lines" >> "$output_file"
+          echo "#" >> "$output_file"
+          echo "# Note: Comments and empty lines filtered out" >> "$output_file"
+          echo "# ----------------------------------------------------------------------------" >> "$output_file"
+          echo "" >> "$output_file"
+          
+          # Create a unique section name for this file
+          section_name=$(echo "$filename" | sed 's/\.[^.]*$//' | tr '[:lower:]' '[:upper:]' | tr '-' '_' | tr '.' '_')
+          echo "[$section_name]" >> "$output_file"
+          echo "# Source file: $relative_path" >> "$output_file"
+          echo "" >> "$output_file"
+          
+          # Filter and process file content
+          # Step 1: Remove comment lines and empty lines
+          # Step 2: Remove whitespace before/after "config system" lines
+          temp_file=$(mktemp)
+          
+          # Filter out comments and empty lines, then clean around "config system"
+          grep -v '^[[:space:]]*#' "$file" | grep -v '^[[:space:]]*$' > "$temp_file"
+          
+          # Process the filtered content and remove whitespace around "config system"
+          processed_file=$(mktemp)
+          
+          # Read line by line and handle "config system" blocks
+          in_config_system=false
+          while IFS= read -r line; do
+            # Check if line starts with "config system"
+            if echo "$line" | grep -q '^[[:space:]]*config system'; then
+              # If we're starting a new config system block, don't add extra whitespace
+              if [ "$in_config_system" = false ]; then
+                echo "$line" >> "$processed_file"
+                in_config_system=true
+              else
+                echo "$line" >> "$processed_file"
+              fi
+            # Check if line starts with "end" (end of config block)
+            elif echo "$line" | grep -q '^[[:space:]]*end[[:space:]]*$'; then
+              echo "$line" >> "$processed_file"
+              in_config_system=false
+            # Regular lines
+            else
+              echo "$line" >> "$processed_file"
+            fi
+          done < "$temp_file"
+          
+          # Add processed content to output file
+          while IFS= read -r line; do
+            # If line starts with [section], make it a subsection
+            if echo "$line" | grep -q '^\[.*\]'; then
+              subsection=$(echo "$line" | sed 's/\[//' | sed 's/\]//')
+              echo "# Original section: $line" >> "$output_file"
+              echo "[$section_name.$subsection]" >> "$output_file"
+            else
+              echo "$line" >> "$output_file"
+            fi
+          done < "$processed_file"
+          
+          # Clean up temp files
+          rm -f "$temp_file" "$processed_file"
+          
+          echo "" >> "$output_file"
+          echo "# End of $filename" >> "$output_file"
+          echo "" >> "$output_file"
+        done
+        
+        # Add footer
+        echo "# ============================================================================" >> "$output_file"
+        echo "# GENERATION INFORMATION" >> "$output_file"
+        echo "# ============================================================================" >> "$output_file"
+        echo "#" >> "$output_file"
+        echo "# This configuration was automatically generated by GitHub Actions." >> "$output_file"
+        echo "#" >> "$output_file"
+        echo "# Workflow: ${{ github.workflow }}" >> "$output_file"
+        echo "# Run ID: ${{ github.run_id }}" >> "$output_file"
+        echo "# Triggered by: ${{ github.event_name }}" >> "$output_file"
+        if [ "${{ github.actor }}" != "" ]; then
+          echo "# Actor: ${{ github.actor }}" >> "$output_file"
+        fi
+        echo "#" >> "$output_file"
+        echo "# To update this configuration, modify any .conf, .config, or .cfg file" >> "$output_file"
+        echo "# in the actions/ directory." >> "$output_file"
+        echo "# ============================================================================" >> "$output_file"
+        
+        echo "✅ Combined configuration generated in actions/COMBINED_CONFIG.conf"
+        
+    - name: Handle no configuration files
+      if: steps.scan.outputs.conf_count == 0
+      run: |
+        output_file="actions/COMBINED_CONFIG.conf"
+        
+        echo "# ============================================================================" > "$output_file"
+        echo "# COMBINED CONFIGURATION FILE" >> "$output_file"
+        echo "# ============================================================================" >> "$output_file"
+        echo "#" >> "$output_file"
+        echo "# Status: No configuration files found" >> "$output_file"
+        echo "# Generated: $(date '+%Y-%m-%d %H:%M:%S UTC')" >> "$output_file"
+        echo "#" >> "$output_file"
+        echo "# No .conf, .config, or .cfg files were found in the actions/ directory." >> "$output_file"
+        echo "# To generate a combined configuration, add configuration files to the" >> "$output_file"
+        echo "# actions/ folder." >> "$output_file"
+        echo "# ============================================================================" >> "$output_file"
+        echo "" >> "$output_file"
+        echo "[EMPTY]" >> "$output_file"
+        echo "no_config_files=true" >> "$output_file"
+        
+        echo "ℹ️ No configuration files found - placeholder conf file created in actions/"
+        
+    - name: Commit configuration file
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "Config Combiner Bot"
+        
+        # Add the generated conf file in the actions folder
+        git add actions/COMBINED_CONFIG.conf
+        
+        # Check if there are changes to commit
+        if git diff --staged --quiet; then
+          echo "📋 No changes to commit - configuration is up to date"
+        else
+          # Create commit message based on the action
+          if [ "${{ steps.scan.outputs.conf_count }}" -gt "0" ]; then
+            commit_msg="🔧 Auto-update: Combined configuration file (${{ steps.scan.outputs.conf_count }} files) in actions/"
+          else
+            commit_msg="🔧 Auto-update: No configuration files found in actions/"
+          fi
+          
+          git commit -m "$commit_msg"
+          git push
+          echo "✅ Configuration file committed and pushed to actions/COMBINED_CONFIG.conf"
+        fi
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Summary
+      run: |
+        echo "## Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **Configuration files processed:** ${{ steps.scan.outputs.conf_count }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Combined configuration file:** \`actions/COMBINED_CONFIG.conf\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Status:** ✅ Completed successfully" >> $GITHUB_STEP_SUMMARY
+        echo "- **Filtering:** Comments and empty lines removed" >> $GITHUB_STEP_SUMMARY
+        
+        if [ "${{ steps.scan.outputs.conf_count }}" -gt "0" ]; then
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Files Processed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          find actions -name "*.conf" -o -name "*.config" -o -name "*.cfg" 2>/dev/null | grep -v "actions/COMBINED_CONFIG.conf" | sort | while read file; do
+            echo "- \`$file\`" >> $GITHUB_STEP_SUMMARY
+          done
+        fi
