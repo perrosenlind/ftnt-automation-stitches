@@ -89,6 +89,7 @@ jobs:
         total_files=${#file_array[@]}
         
         echo "Total files to process: $total_files"
+        echo "File list: ${file_array[@]}"
         
         # Process each configuration file
         for i in "${!file_array[@]}"; do
@@ -99,7 +100,9 @@ jobs:
           is_first_file=$([ $file_counter -eq 1 ] && echo "true" || echo "false")
           is_last_file=$([ $file_counter -eq $total_files ] && echo "true" || echo "false")
           
-          echo "Processing file: $file (file #$file_counter of $total_files) - First: $is_first_file, Last: $is_last_file"
+          echo "Processing file: $file (file #$file_counter of $total_files)"
+          echo "  - First file: $is_first_file"
+          echo "  - Last file: $is_last_file"
           
           echo "" >> "$output_file"
           echo "# ============================================================================" >> "$output_file"
@@ -107,32 +110,40 @@ jobs:
           echo "# ============================================================================" >> "$output_file"
           echo "" >> "$output_file"
           
-          # Process the file line by line
-          while IFS= read -r line; do
-            # Skip comment lines and empty lines outside config blocks
+          # Read the file and process each line
+          while IFS= read -r line || [ -n "$line" ]; do
+            echo "  Processing line: '$line'"
+            
+            # Skip comment lines and empty lines
             if echo "$line" | grep -q '^[[:space:]]*#' || echo "$line" | grep -q '^[[:space:]]*$'; then
+              echo "    -> Skipping comment/empty line"
               continue
             fi
             
             # Check if line starts with "config system automation-action"
             if echo "$line" | grep -q '^[[:space:]]*config system automation-action'; then
-              # Only keep this line in the first file
               if [ "$is_first_file" = "true" ]; then
+                echo "    -> Adding config line (first file)"
                 echo "$line" >> "$output_file"
+              else
+                echo "    -> Skipping config line (not first file)"
               fi
-              # Skip to content inside the block
               continue
             fi
             
-            # Check if line starts with "end" - only keep in last file for automation-action
+            # Check if line is "end" statement
             if echo "$line" | grep -q '^[[:space:]]*end[[:space:]]*$'; then
               if [ "$is_last_file" = "true" ]; then
+                echo "    -> Adding end statement (last file)"
                 echo "$line" >> "$output_file"
+              else
+                echo "    -> Skipping end statement (not last file)"
               fi
               continue
             fi
             
-            # For all other lines (content inside config blocks), include them
+            # For all other lines, include them
+            echo "    -> Adding content line"
             echo "$line" >> "$output_file"
             
           done < "$file"
@@ -143,10 +154,6 @@ jobs:
         
         echo "✅ Combined configuration generated"
         echo "File size: $(wc -l < "$output_file") lines"
-        echo "Content preview:"
-        head -20 "$output_file"
-        echo "..."
-        tail -10 "$output_file"
         
     - name: Handle no configuration files
       if: steps.scan.outputs.conf_count == 0
