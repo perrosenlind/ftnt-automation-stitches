@@ -124,13 +124,7 @@ jobs:
             continue
           fi
           
-          echo "" >> "$output_file"
-          echo "# ============================================================================" >> "$output_file"
-          echo "# FILE: $filename" >> "$output_file"
-          echo "# ============================================================================" >> "$output_file"
-          echo "" >> "$output_file"
-          
-          # Read the file and process each line
+          # Read the file and process each line (NO FILE HEADER COMMENTS)
           while IFS= read -r line || [ -n "$line" ]; do
             echo "  Processing line: '$line'"
             
@@ -168,8 +162,6 @@ jobs:
             
           done < "$file"
           
-          echo "" >> "$output_file"
-          echo "# End of $filename" >> "$output_file"
         done < "$temp_file_list"
         
         # Clean up
