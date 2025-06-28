@@ -42,26 +42,7 @@ jobs:
         echo "Looking for config files:"
         find . -name "*.conf" -o -name "*.config" -o -name "*.cfg" || echo "No config files found anywhere"
         
-    - name: Create sample config file for testing
-      run: |
-        echo "Creating sample config file for testing..."
-        cat > actions/test.conf << 'EOF'
-        # This is a test configuration
-        config system global
-            set hostname "test-device"
-            set timezone "UTC"
-        end
-        
-        config system interface
-            edit "port1"
-                set ip 192.168.1.1/24
-            next
-        end
-        EOF
-        echo "Sample config created"
-        ls -la actions/
-        
-    - name: Scan for configuration files
+      - name: Scan for configuration files
       id: scan
       run: |
         echo "Scanning for configuration files in actions folder..."
@@ -168,7 +149,6 @@ jobs:
         
         # Add the generated conf file
         git add actions/COMBINED_CONFIG.conf
-        git add actions/test.conf
         
         echo "Git status after adding:"
         git status
