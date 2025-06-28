@@ -1,0 +1,241 @@
+name: Combine Stitches Configuration Files
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'stitches/**'  # This will trigger on ANY file change in stitches folder
+  pull_request:
+    paths:
+      - 'stitches/**'
+  workflow_dispatch:  # Allows manual trigger
+
+jobs:
+  combine-config-files:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Create stitches folder if it doesn't exist
+      run: |
+        mkdir -p stitches
+        echo "Stitches folder ready"
+        ls -la stitches/
+        
+    - name: Debug - Check current directory and files
+      run: |
+        echo "Current directory:"
+        pwd
+        echo "Directory contents:"
+        ls -la
+        echo "Stitches folder contents:"
+        ls -la stitches/ || echo "Stitches folder doesn't exist or is empty"
+        echo "Looking for config files:"
+        find . -name "*.conf" -o -name "*.config" -o -name "*.cfg" || echo "No config files found anywhere"
+        
+    - name: Debug - List all files in stitches folder
+      run: |
+        echo "=== ALL FILES IN STITCHES FOLDER ==="
+        find stitches -type f -name "*" | sort
+        echo ""
+        echo "=== CONFIG FILES FOUND ==="
+        find stitches -name "*.conf" -o -name "*.config" -o -name "*.cfg" | grep -v "stitches/ALL_STITCHES.conf" | sort
+        echo ""
+        echo "=== CURRENT ALL_STITCHES.conf CONTENT ==="
+        if [ -f "stitches/ALL_STITCHES.conf" ]; then
+          cat stitches/ALL_STITCHES.conf
+        else
+          echo "ALL_STITCHES.conf does not exist yet"
+        fi
+        
+    - name: Scan for configuration files
+      id: scan
+      run: |
+        echo "Scanning for configuration files in stitches folder..."
+        
+        # Count configuration files (excluding the combined file)
+        conf_count=$(find stitches -name "*.conf" -o -name "*.config" -o -name "*.cfg" 2>/dev/null | grep -v "stitches/ALL_STITCHES.conf" | wc -l)
+        echo "Found $conf_count configuration files"
+        echo "conf_count=$conf_count" >> $GITHUB_OUTPUT
+        
+        # List all found files
+        echo "Configuration files found:"
+        find stitches -name "*.conf" -o -name "*.config" -o -name "*.cfg" 2>/dev/null | grep -v "stitches/ALL_STITCHES.conf" | sort || echo "No configuration files found"
+        
+    - name: Generate combined configuration file
+      if: steps.scan.outputs.conf_count > 0
+      run: |
+        output_file="stitches/ALL_STITCHES.conf"
+        echo "Creating output file: $output_file"
+        
+        # Create the output file with header
+        cat > "$output_file" << 'EOF'
+        # ============================================================================
+        # COMBINED STITCHES CONFIGURATION FILE
+        # ============================================================================
+        #
+        EOF
+        
+        echo "# Repository: ${{ github.repository }}" >> "$output_file"
+        echo "# Branch: ${{ github.ref_name }}" >> "$output_file"
+        echo "# Generated: $(date '+%Y-%m-%d %H:%M:%S UTC')" >> "$output_file"
+        echo "# Commit: ${{ github.sha }}" >> "$output_file"
+        echo "# Total Config Files: ${{ steps.scan.outputs.conf_count }}" >> "$output_file"
+        echo "#" >> "$output_file"
+        echo "# This file contains all configuration files found in the stitches/ directory." >> "$output_file"
+        echo "# Configuration files are automatically combined whenever changes are detected." >> "$output_file"
+        echo "#" >> "$output_file"
+        echo "# IMPORTANT: This file is auto-generated. Do not edit manually!" >> "$output_file"
+        echo "# ============================================================================" >> "$output_file"
+        echo "" >> "$output_file"
+        
+        # Create a temporary file list that handles filenames with spaces
+        temp_file_list=$(mktemp)
+        find stitches -name "*.conf" -o -name "*.config" -o -name "*.cfg" 2>/dev/null | grep -v "stitches/ALL_STITCHES.conf" | sort > "$temp_file_list"
+        
+        # Count total files
+        total_files=$(wc -l < "$temp_file_list")
+        
+        echo "Total files to process: $total_files"
+        echo "Files to process:"
+        cat "$temp_file_list"
+        
+        # Process each configuration file
+        file_counter=0
+        while IFS= read -r file; do
+          file_counter=$((file_counter + 1))
+          filename=$(basename "$file")
+          
+          is_first_file=$([ $file_counter -eq 1 ] && echo "true" || echo "false")
+          is_last_file=$([ $file_counter -eq $total_files ] && echo "true" || echo "false")
+          
+          echo "Processing file: '$file' (file #$file_counter of $total_files)"
+          echo "  - First file: $is_first_file"
+          echo "  - Last file: $is_last_file"
+          
+          # Check if file exists
+          if [ ! -f "$file" ]; then
+            echo "  - ERROR: File not found: '$file'"
+            continue
+          fi
+          
+          # Read the file and process each line
+          found_config_start=false
+          while IFS= read -r line || [ -n "$line" ]; do
+            echo "  Processing line: '$line'"
+            
+            # Look for the start of config system automation-stitch
+            if echo "$line" | grep -q '^[[:space:]]*config system automation-stitch'; then
+              found_config_start=true
+              # Only include this line in the first file
+              if [ "$is_first_file" = "true" ]; then
+                echo "    -> Adding config line (first file)"
+                echo "$line" >> "$output_file"
+              else
+                echo "    -> Skipping config line (not first file)"
+              fi
+              continue
+            fi
+            
+            # If we haven't found the config start yet, skip this line
+            if [ "$found_config_start" = "false" ]; then
+              echo "    -> Skipping line before config start"
+              continue
+            fi
+            
+            # After config start, handle the end statement specially
+            if echo "$line" | grep -q '^[[:space:]]*end[[:space:]]*$'; then
+              if [ "$is_last_file" = "true" ]; then
+                echo "    -> Adding end statement (last file)"
+                echo "$line" >> "$output_file"
+              else
+                echo "    -> Skipping end statement (not last file)"
+              fi
+              continue
+            fi
+            
+            # For all other lines after config start, include them as-is (preserving comments, whitespace, etc.)
+            echo "    -> Adding line as-is"
+            echo "$line" >> "$output_file"
+            
+          done < "$file"
+          
+        done < "$temp_file_list"
+        
+        # Clean up
+        rm -f "$temp_file_list"
+        
+        echo "✅ Combined configuration generated"
+        echo "File size: $(wc -l < "$output_file") lines"
+        
+    - name: Handle no configuration files
+      if: steps.scan.outputs.conf_count == 0
+      run: |
+        output_file="stitches/ALL_STITCHES.conf"
+        echo "No config files found, creating placeholder"
+        
+        cat > "$output_file" << 'EOF'
+        # ============================================================================
+        # COMBINED STITCHES CONFIGURATION FILE
+        # ============================================================================
+        #
+        # Status: No configuration files found
+        EOF
+        echo "# Generated: $(date '+%Y-%m-%d %H:%M:%S UTC')" >> "$output_file"
+        echo "#" >> "$output_file"
+        echo "# No .conf, .config, or .cfg files were found in the stitches/ directory." >> "$output_file"
+        echo "# ============================================================================" >> "$output_file"
+        
+        echo "ℹ️ Placeholder file created"
+        
+    - name: Verify file creation
+      run: |
+        echo "Checking if file was created:"
+        if [ -f "stitches/ALL_STITCHES.conf" ]; then
+          echo "✅ File exists!"
+          echo "File size: $(wc -l < stitches/ALL_STITCHES.conf) lines"
+          echo "Full file content:"
+          cat stitches/ALL_STITCHES.conf
+        else
+          echo "❌ File was not created!"
+          exit 1
+        fi
+        
+    - name: Commit configuration file
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "Config Combiner Bot"
+        
+        echo "Git status before adding:"
+        git status
+        
+        # Add the generated conf file
+        git add stitches/ALL_STITCHES.conf
+        
+        echo "Git status after adding:"
+        git status
+        
+        # Check if there are changes to commit
+        if git diff --staged --quiet; then
+          echo "📋 No changes to commit - configuration is up to date"
+        else
+          commit_msg="🔧 Auto-update: Combined stitches configuration file (${{ steps.scan.outputs.conf_count }} files)"
+          echo "Committing with message: $commit_msg"
+          git commit -m "$commit_msg"
+          git push
+          echo "✅ Configuration file committed and pushed"
+        fi
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Final verification
+      run: |
+        echo "Final check - listing all files in stitches folder:"
+        ls -la stitches/
+        echo "Repository status:"
+        git log --oneline -3
