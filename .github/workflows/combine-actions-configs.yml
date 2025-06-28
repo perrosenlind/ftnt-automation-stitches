@@ -94,26 +94,35 @@ jobs:
         echo "# ============================================================================" >> "$output_file"
         echo "" >> "$output_file"
         
-        # Create array of files to process
-        file_list=$(find actions -name "*.conf" -o -name "*.config" -o -name "*.cfg" 2>/dev/null | grep -v "actions/ALL_ACTIONS.conf" | sort)
-        file_array=($file_list)
-        total_files=${#file_array[@]}
+        # Create a temporary file list that handles filenames with spaces
+        temp_file_list=$(mktemp)
+        find actions -name "*.conf" -o -name "*.config" -o -name "*.cfg" 2>/dev/null | grep -v "actions/ALL_ACTIONS.conf" | sort > "$temp_file_list"
+        
+        # Count total files
+        total_files=$(wc -l < "$temp_file_list")
         
         echo "Total files to process: $total_files"
-        echo "File list: ${file_array[@]}"
+        echo "Files to process:"
+        cat "$temp_file_list"
         
         # Process each configuration file
-        for i in "${!file_array[@]}"; do
-          file="${file_array[$i]}"
-          file_counter=$((i + 1))
+        file_counter=0
+        while IFS= read -r file; do
+          file_counter=$((file_counter + 1))
           filename=$(basename "$file")
           
           is_first_file=$([ $file_counter -eq 1 ] && echo "true" || echo "false")
           is_last_file=$([ $file_counter -eq $total_files ] && echo "true" || echo "false")
           
-          echo "Processing file: $file (file #$file_counter of $total_files)"
+          echo "Processing file: '$file' (file #$file_counter of $total_files)"
           echo "  - First file: $is_first_file"
           echo "  - Last file: $is_last_file"
+          
+          # Check if file exists
+          if [ ! -f "$file" ]; then
+            echo "  - ERROR: File not found: '$file'"
+            continue
+          fi
           
           echo "" >> "$output_file"
           echo "# ============================================================================" >> "$output_file"
@@ -161,7 +170,10 @@ jobs:
           
           echo "" >> "$output_file"
           echo "# End of $filename" >> "$output_file"
-        done
+        done < "$temp_file_list"
+        
+        # Clean up
+        rm -f "$temp_file_list"
         
         echo "✅ Combined configuration generated"
         echo "File size: $(wc -l < "$output_file") lines"
