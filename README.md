@@ -4,7 +4,7 @@ A comprehensive automation project for generating FortiGate CLI output and confi
 
 ## 📋 Project Overview
 
-Create a script that can generate CLI output or configure directly on the remote FortiGate via API or Ansible.
+A collection of cli-templates to create various parts of the automation script routines. Both notification profiles, triggers and actions will be in this repository. 
 
 ## 🎯 Automation Stitches Roadmap
 
@@ -60,6 +60,6 @@ Create a script that can generate CLI output or configure directly on the remote
 
 *Implementation details and setup instructions coming soon...*
 
-## 📝 Contributing
+## 📝 External documentation
 
-*Contribution guidelines coming soon...*
+https://docs.fortinet.com/document/fortigate/7.6.3/administration-guide/427797/variables-in-actions
