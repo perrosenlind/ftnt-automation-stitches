@@ -2,7 +2,7 @@ name: Combine Configuration Files
 
 on:
   push:
-    branches: [ main, master ]  # Make sure it runs on your default branch
+    branches: [ main, master ]
     paths:
       - 'actions/**/*.conf'
       - 'actions/**/*.config'
@@ -12,7 +12,7 @@ on:
       - 'actions/**/*.conf'
       - 'actions/**/*.config'
       - 'actions/**/*.cfg'
-  workflow_dispatch:  # Allows manual triggering
+  workflow_dispatch:
 
 jobs:
   combine-config-files:
@@ -83,11 +83,11 @@ jobs:
         
         # Create the output file with header
         cat > "$output_file" << 'EOF'
-# ============================================================================
-# COMBINED CONFIGURATION FILE
-# ============================================================================
-#
-EOF
+        # ============================================================================
+        # COMBINED CONFIGURATION FILE
+        # ============================================================================
+        #
+        EOF
         
         echo "# Repository: ${{ github.repository }}" >> "$output_file"
         echo "# Branch: ${{ github.ref_name }}" >> "$output_file"
@@ -132,12 +132,12 @@ EOF
         echo "No config files found, creating placeholder"
         
         cat > "$output_file" << 'EOF'
-# ============================================================================
-# COMBINED CONFIGURATION FILE
-# ============================================================================
-#
-# Status: No configuration files found
-EOF
+        # ============================================================================
+        # COMBINED CONFIGURATION FILE
+        # ============================================================================
+        #
+        # Status: No configuration files found
+        EOF
         echo "# Generated: $(date '+%Y-%m-%d %H:%M:%S UTC')" >> "$output_file"
         echo "#" >> "$output_file"
         echo "# No .conf, .config, or .cfg files were found in the actions/ directory." >> "$output_file"
@@ -168,7 +168,7 @@ EOF
         
         # Add the generated conf file
         git add actions/COMBINED_CONFIG.conf
-        git add actions/test.conf  # Also add the test file
+        git add actions/test.conf
         
         echo "Git status after adding:"
         git status
