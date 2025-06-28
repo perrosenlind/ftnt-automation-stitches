@@ -9,7 +9,7 @@ Both the `%%log%%` and `%%results%%` variables can use sub-variables to drill do
 
 For instance, using the following trigger event log:
 
-`date=2025-02-06 time=18:32:21 devid="FGVM04TM2400xxxx" devname="*FGDocs*" eventtime=1738895541338331122 tz="-0800" logid="0100032002" type="event" subtype="system" level="alert" vd="root" logdesc="Admin login failed" sn="0" user="*abc*" ui="https(192.168.2.204)" method="https" srcip=192.168.2.204 dstip=192.168.2.87 action="login" status="*failed*" reason="passwd_invalid" msg="Administrator abc login failed from https(192.168.2.204) because of invalid password"`
+date=2025-02-06 time=18:32:21 devid="FGVM04TM2400xxxx" devname="*FGDocs*" eventtime=1738895541338331122 tz="-0800" logid="0100032002" type="event" subtype="system" level="alert" vd="root" logdesc="Admin login failed" sn="0" user="*abc*" ui="https(192.168.2.204)" method="https" srcip=192.168.2.204 dstip=192.168.2.87 action="login" status="*failed*" reason="passwd_invalid" msg="Administrator abc login failed from https(192.168.2.204) because of invalid password"
 
 - `%%log.user%%` returns *abc*
 - `%%log.status%%` returns *failed*
