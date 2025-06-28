@@ -129,8 +129,8 @@ jobs:
           while IFS= read -r line || [ -n "$line" ]; do
             echo "  Processing line: '$line'"
             
-            # Look for the start of config system automation-action
-            if echo "$line" | grep -q '^[[:space:]]*config system automation-action'; then
+            # Look for the start of config system automation-trigger (changed from automation-action)
+            if echo "$line" | grep -q '^[[:space:]]*config system automation-trigger'; then
               found_config_start=true
               # Only include this line in the first file
               if [ "$is_first_file" = "true" ]; then
