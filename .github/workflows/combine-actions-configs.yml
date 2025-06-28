@@ -83,15 +83,23 @@ jobs:
         echo "# ============================================================================" >> "$output_file"
         echo "" >> "$output_file"
         
-        # Get total file count first
-        total_files=$(find actions -name "*.conf" -o -name "*.config" -o -name "*.cfg" 2>/dev/null | grep -v "actions/ALL_ACTIONS.conf" | wc -l)
+        # Create array of files to process
+        file_list=$(find actions -name "*.conf" -o -name "*.config" -o -name "*.cfg" 2>/dev/null | grep -v "actions/ALL_ACTIONS.conf" | sort)
+        file_array=($file_list)
+        total_files=${#file_array[@]}
+        
+        echo "Total files to process: $total_files"
         
         # Process each configuration file
-        file_counter=0
-        find actions -name "*.conf" -o -name "*.config" -o -name "*.cfg" 2>/dev/null | grep -v "actions/ALL_ACTIONS.conf" | sort | while read file; do
-          file_counter=$((file_counter + 1))
-          echo "Processing file: $file (file #$file_counter of $total_files)"
+        for i in "${!file_array[@]}"; do
+          file="${file_array[$i]}"
+          file_counter=$((i + 1))
           filename=$(basename "$file")
+          
+          is_first_file=$([ $file_counter -eq 1 ] && echo "true" || echo "false")
+          is_last_file=$([ $file_counter -eq $total_files ] && echo "true" || echo "false")
+          
+          echo "Processing file: $file (file #$file_counter of $total_files) - First: $is_first_file, Last: $is_last_file"
           
           echo "" >> "$output_file"
           echo "# ============================================================================" >> "$output_file"
@@ -99,54 +107,35 @@ jobs:
           echo "# ============================================================================" >> "$output_file"
           echo "" >> "$output_file"
           
-          # Smart filtering that preserves content within config blocks
-          temp_file=$(mktemp)
-          in_automation_action_block=false
-          in_other_config_block=false
-          is_first_file=$([ $file_counter -eq 1 ] && echo "true" || echo "false")
-          is_last_file=$([ $file_counter -eq $total_files ] && echo "true" || echo "false")
-          
+          # Process the file line by line
           while IFS= read -r line; do
+            # Skip comment lines and empty lines outside config blocks
+            if echo "$line" | grep -q '^[[:space:]]*#' || echo "$line" | grep -q '^[[:space:]]*$'; then
+              continue
+            fi
+            
             # Check if line starts with "config system automation-action"
             if echo "$line" | grep -q '^[[:space:]]*config system automation-action'; then
               # Only keep this line in the first file
               if [ "$is_first_file" = "true" ]; then
-                echo "$line" >> "$temp_file"
-                in_automation_action_block=true
-              else
-                # Skip this line in subsequent files but still track we're in automation-action block
-                in_automation_action_block=true
+                echo "$line" >> "$output_file"
               fi
-            # Check if line starts with other "config system" types
-            elif echo "$line" | grep -q '^[[:space:]]*config system' && ! echo "$line" | grep -q '^[[:space:]]*config system automation-action'; then
-              in_other_config_block=true
-              echo "$line" >> "$temp_file"
-            # Check if we're at the end of any config block
-            elif echo "$line" | grep -q '^[[:space:]]*end[[:space:]]*$'; then
-              # Handle end for automation-action blocks
-              if [ "$in_automation_action_block" = "true" ]; then
-                # Only keep "end" in the last file for automation-action blocks
-                if [ "$is_last_file" = "true" ]; then
-                  echo "$line" >> "$temp_file"
-                fi
-                in_automation_action_block=false
-              # Handle end for other config blocks
-              elif [ "$in_other_config_block" = "true" ]; then
-                echo "$line" >> "$temp_file"
-                in_other_config_block=false
-              fi
-            # If we're inside any config block, keep everything (including whitespace lines)
-            elif [ "$in_automation_action_block" = "true" ] || [ "$in_other_config_block" = "true" ]; then
-              echo "$line" >> "$temp_file"
-            # Outside config blocks, filter out comments and empty lines
-            elif ! echo "$line" | grep -q '^[[:space:]]*#' && ! echo "$line" | grep -q '^[[:space:]]*$'; then
-              echo "$line" >> "$temp_file"
+              # Skip to content inside the block
+              continue
             fi
+            
+            # Check if line starts with "end" - only keep in last file for automation-action
+            if echo "$line" | grep -q '^[[:space:]]*end[[:space:]]*$'; then
+              if [ "$is_last_file" = "true" ]; then
+                echo "$line" >> "$output_file"
+              fi
+              continue
+            fi
+            
+            # For all other lines (content inside config blocks), include them
+            echo "$line" >> "$output_file"
+            
           done < "$file"
-          
-          # Add processed content to output file
-          cat "$temp_file" >> "$output_file"
-          rm -f "$temp_file"
           
           echo "" >> "$output_file"
           echo "# End of $filename" >> "$output_file"
@@ -154,8 +143,10 @@ jobs:
         
         echo "✅ Combined configuration generated"
         echo "File size: $(wc -l < "$output_file") lines"
-        echo "First 10 lines of generated file:"
-        head -10 "$output_file"
+        echo "Content preview:"
+        head -20 "$output_file"
+        echo "..."
+        tail -10 "$output_file"
         
     - name: Handle no configuration files
       if: steps.scan.outputs.conf_count == 0
@@ -183,8 +174,8 @@ jobs:
         if [ -f "actions/ALL_ACTIONS.conf" ]; then
           echo "✅ File exists!"
           echo "File size: $(wc -l < actions/ALL_ACTIONS.conf) lines"
-          echo "File content preview:"
-          head -20 actions/ALL_ACTIONS.conf
+          echo "Full file content:"
+          cat actions/ALL_ACTIONS.conf
         else
           echo "❌ File was not created!"
           exit 1
