@@ -101,7 +101,8 @@ jobs:
           
           # Smart filtering that preserves content within config blocks
           temp_file=$(mktemp)
-          in_config_block=false
+          in_automation_action_block=false
+          in_other_config_block=false
           is_first_file=$([ $file_counter -eq 1 ] && echo "true" || echo "false")
           is_last_file=$([ $file_counter -eq $total_files ] && echo "true" || echo "false")
           
@@ -111,24 +112,31 @@ jobs:
               # Only keep this line in the first file
               if [ "$is_first_file" = "true" ]; then
                 echo "$line" >> "$temp_file"
-                in_config_block=true
+                in_automation_action_block=true
               else
-                # Skip this line in subsequent files but still track we're in a config block
-                in_config_block=true
+                # Skip this line in subsequent files but still track we're in automation-action block
+                in_automation_action_block=true
               fi
             # Check if line starts with other "config system" types
-            elif echo "$line" | grep -q '^[[:space:]]*config system'; then
-              in_config_block=true
+            elif echo "$line" | grep -q '^[[:space:]]*config system' && ! echo "$line" | grep -q '^[[:space:]]*config system automation-action'; then
+              in_other_config_block=true
               echo "$line" >> "$temp_file"
-            # Check if we're at the end of a config block
-            elif echo "$line" | grep -q '^[[:space:]]*end[[:space:]]*$' && [ "$in_config_block" = true ]; then
-              # Only keep "end" in the last file for automation-action blocks
-              if [ "$is_last_file" = "true" ]; then
+            # Check if we're at the end of any config block
+            elif echo "$line" | grep -q '^[[:space:]]*end[[:space:]]*$'; then
+              # Handle end for automation-action blocks
+              if [ "$in_automation_action_block" = "true" ]; then
+                # Only keep "end" in the last file for automation-action blocks
+                if [ "$is_last_file" = "true" ]; then
+                  echo "$line" >> "$temp_file"
+                fi
+                in_automation_action_block=false
+              # Handle end for other config blocks
+              elif [ "$in_other_config_block" = "true" ]; then
                 echo "$line" >> "$temp_file"
+                in_other_config_block=false
               fi
-              in_config_block=false
-            # If we're inside a config block, keep everything (including whitespace lines)
-            elif [ "$in_config_block" = true ]; then
+            # If we're inside any config block, keep everything (including whitespace lines)
+            elif [ "$in_automation_action_block" = "true" ] || [ "$in_other_config_block" = "true" ]; then
               echo "$line" >> "$temp_file"
             # Outside config blocks, filter out comments and empty lines
             elif ! echo "$line" | grep -q '^[[:space:]]*#' && ! echo "$line" | grep -q '^[[:space:]]*$'; then
