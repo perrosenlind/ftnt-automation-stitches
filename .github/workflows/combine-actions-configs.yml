@@ -42,7 +42,7 @@ jobs:
         echo "Looking for config files:"
         find . -name "*.conf" -o -name "*.config" -o -name "*.cfg" || echo "No config files found anywhere"
         
-      - name: Scan for configuration files
+    - name: Scan for configuration files
       id: scan
       run: |
         echo "Scanning for configuration files in actions folder..."
