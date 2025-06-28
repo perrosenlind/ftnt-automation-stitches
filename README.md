@@ -177,8 +177,7 @@ Actions support FortiGate variables for dynamic content:
 ## 📝 External Documentation
 
 - [FortiGate Administration Guide - Variables in Actions](https://docs.fortinet.com/document/fortigate/7.6.3/administration-guide/427797/variables-in-actions)
-- [FortiGate Automation Stitches Overview](https://docs.fortinet.com/document/fortigate/7.6.3/administration-guide/956824/automation)
-- [FortiGate REST API Reference](https://docs.fortinet.com/document/fortigate/7.6.3/rest-api-reference)
+- [FortiGate Automation Stitches Overview](https://docs.fortinet.com/document/fortigate/7.6.3/administration-guide/139441/automation-stitches)
 
 ## 📄 License
 
