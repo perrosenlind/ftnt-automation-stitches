@@ -49,9 +49,8 @@ The project includes GitHub Actions that automatically combine configuration fil
 
 ### 📢 Actions (Notification Profiles)
 Current implementations:
-- ✅ **Microsoft Teams** - Formatted log notifications with webhook integration
+- ✅ **Microsoft Teams** - Formatted log notifications with webhook integration & Simple result forwarding
 - ✅ **Slack** - Simple notification forwarding
-- ✅ **Teams (Basic)** - Simple result forwarding
 
 ### ⚡ Triggers (Event Detection)
 Current implementations:
