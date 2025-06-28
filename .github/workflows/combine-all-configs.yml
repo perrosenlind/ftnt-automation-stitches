@@ -1,0 +1,238 @@
+name: Combine All Automation Configuration Files
+
+on:
+  workflow_run:
+    workflows: ["Combine Configuration Files", "Combine Triggers Configuration Files", "Combine Stitches Configuration Files"]
+    types:
+      - completed
+  workflow_dispatch:  # Allows manual trigger
+
+jobs:
+  combine-all-configs:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Debug - Check for ALL_*.conf files
+      run: |
+        echo "=== SCANNING FOR ALL_*.conf FILES ==="
+        echo "Actions folder:"
+        ls -la actions/ALL_*.conf 2>/dev/null || echo "No ALL_*.conf found in actions/"
+        echo "Triggers folder:"
+        ls -la triggers/ALL_*.conf 2>/dev/null || echo "No ALL_*.conf found in triggers/"
+        echo "Stitches folder:"
+        ls -la stitches/ALL_*.conf 2>/dev/null || echo "No ALL_*.conf found in stitches/"
+        
+    - name: Check for required files
+      id: check_files
+      run: |
+        actions_file=""
+        triggers_file=""
+        stitches_file=""
+        
+        # Find ALL_*.conf files in each directory
+        if [ -f "actions/ALL_ACTIONS.conf" ]; then
+          actions_file="actions/ALL_ACTIONS.conf"
+        fi
+        
+        if [ -f "triggers/ALL_TRIGGERS.conf" ]; then
+          triggers_file="triggers/ALL_TRIGGERS.conf"
+        fi
+        
+        if [ -f "stitches/ALL_STITCHES.conf" ]; then
+          stitches_file="stitches/ALL_STITCHES.conf"
+        fi
+        
+        echo "actions_file=$actions_file" >> $GITHUB_OUTPUT
+        echo "triggers_file=$triggers_file" >> $GITHUB_OUTPUT
+        echo "stitches_file=$stitches_file" >> $GITHUB_OUTPUT
+        
+        # Count how many files we found
+        file_count=0
+        [ -n "$actions_file" ] && file_count=$((file_count + 1))
+        [ -n "$triggers_file" ] && file_count=$((file_count + 1))
+        [ -n "$stitches_file" ] && file_count=$((file_count + 1))
+        
+        echo "file_count=$file_count" >> $GITHUB_OUTPUT
+        
+        echo "Found $file_count ALL_*.conf files:"
+        echo "  Actions: $actions_file"
+        echo "  Triggers: $triggers_file"
+        echo "  Stitches: $stitches_file"
+        
+    - name: Generate combined automation stitches file
+      if: steps.check_files.outputs.file_count > 0
+      run: |
+        output_file="AUTOMATION-STITCHES.conf"
+        echo "Creating combined file: $output_file"
+        
+        # Create the output file with header
+        cat > "$output_file" << 'EOF'
+        # ============================================================================
+        # COMBINED AUTOMATION STITCHES CONFIGURATION FILE
+        # ============================================================================
+        #
+        EOF
+        
+        echo "# Repository: ${{ github.repository }}" >> "$output_file"
+        echo "# Branch: ${{ github.ref_name }}" >> "$output_file"
+        echo "# Generated: $(date '+%Y-%m-%d %H:%M:%S UTC')" >> "$output_file"
+        echo "# Commit: ${{ github.sha }}" >> "$output_file"
+        echo "# Total Component Files: ${{ steps.check_files.outputs.file_count }}" >> "$output_file"
+        echo "#" >> "$output_file"
+        echo "# This file contains the complete automation configuration combining:" >> "$output_file"
+        echo "# 1. Actions (notification profiles and automation actions)" >> "$output_file"
+        echo "# 2. Triggers (event-based automation triggers)" >> "$output_file"
+        echo "# 3. Stitches (automation workflows linking triggers to actions)" >> "$output_file"
+        echo "#" >> "$output_file"
+        echo "# IMPORTANT: This file is auto-generated. Do not edit manually!" >> "$output_file"
+        echo "# ============================================================================" >> "$output_file"
+        echo "" >> "$output_file"
+        
+        # Function to extract content between config blocks, skipping header comments
+        extract_config_content() {
+          local file="$1"
+          local config_type="$2"
+          
+          echo "Processing $file for $config_type..."
+          
+          if [ ! -f "$file" ]; then
+            echo "File $file not found, skipping..."
+            return
+          fi
+          
+          # Skip the header comments (lines starting with # until we find config)
+          in_header=true
+          found_config=false
+          
+          while IFS= read -r line || [ -n "$line" ]; do
+            # Skip header comments
+            if [ "$in_header" = "true" ]; then
+              if echo "$line" | grep -q '^[[:space:]]*#' || echo "$line" | grep -q '^[[:space:]]*$'; then
+                continue
+              else
+                in_header=false
+              fi
+            fi
+            
+            # Look for config system automation-* line
+            if echo "$line" | grep -q "^[[:space:]]*config system automation-"; then
+              found_config=true
+              echo "$line" >> "$output_file"
+              continue
+            fi
+            
+            # If we found config, include everything until the final 'end'
+            if [ "$found_config" = "true" ]; then
+              echo "$line" >> "$output_file"
+            fi
+            
+          done < "$file"
+          
+          # Add a blank line after each section
+          echo "" >> "$output_file"
+        }
+        
+        # Process files in order: actions, triggers, stitches
+        if [ -n "${{ steps.check_files.outputs.actions_file }}" ]; then
+          echo "# Actions Configuration" >> "$output_file"
+          echo "# ===================" >> "$output_file"
+          echo "" >> "$output_file"
+          extract_config_content "${{ steps.check_files.outputs.actions_file }}" "actions"
+        fi
+        
+        if [ -n "${{ steps.check_files.outputs.triggers_file }}" ]; then
+          echo "# Triggers Configuration" >> "$output_file"
+          echo "# ====================" >> "$output_file"
+          echo "" >> "$output_file"
+          extract_config_content "${{ steps.check_files.outputs.triggers_file }}" "triggers"
+        fi
+        
+        if [ -n "${{ steps.check_files.outputs.stitches_file }}" ]; then
+          echo "# Stitches Configuration" >> "$output_file"
+          echo "# ====================" >> "$output_file"
+          echo "" >> "$output_file"
+          extract_config_content "${{ steps.check_files.outputs.stitches_file }}" "stitches"
+        fi
+        
+        echo "✅ Combined automation stitches file generated"
+        echo "File size: $(wc -l < "$output_file") lines"
+        
+    - name: Handle no configuration files
+      if: steps.check_files.outputs.file_count == 0
+      run: |
+        output_file="AUTOMATION-STITCHES.conf"
+        echo "No ALL_*.conf files found, creating placeholder"
+        
+        cat > "$output_file" << 'EOF'
+        # ============================================================================
+        # COMBINED AUTOMATION STITCHES CONFIGURATION FILE
+        # ============================================================================
+        #
+        # Status: No configuration files found
+        EOF
+        echo "# Generated: $(date '+%Y-%m-%d %H:%M:%S UTC')" >> "$output_file"
+        echo "#" >> "$output_file"
+        echo "# No ALL_*.conf files were found in actions/, triggers/, or stitches/ directories." >> "$output_file"
+        echo "# Please ensure the individual component workflows have run successfully." >> "$output_file"
+        echo "# ============================================================================" >> "$output_file"
+        
+        echo "ℹ️ Placeholder file created"
+        
+    - name: Verify file creation
+      run: |
+        echo "Checking if file was created:"
+        if [ -f "AUTOMATION-STITCHES.conf" ]; then
+          echo "✅ File exists!"
+          echo "File size: $(wc -l < AUTOMATION-STITCHES.conf) lines"
+          echo ""
+          echo "=== FIRST 50 LINES OF GENERATED FILE ==="
+          head -50 AUTOMATION-STITCHES.conf
+          echo ""
+          echo "=== LAST 20 LINES OF GENERATED FILE ==="
+          tail -20 AUTOMATION-STITCHES.conf
+        else
+          echo "❌ File was not created!"
+          exit 1
+        fi
+        
+    - name: Commit combined configuration file
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "Automation Combiner Bot"
+        
+        echo "Git status before adding:"
+        git status
+        
+        # Add the generated conf file
+        git add AUTOMATION-STITCHES.conf
+        
+        echo "Git status after adding:"
+        git status
+        
+        # Check if there are changes to commit
+        if git diff --staged --quiet; then
+          echo "📋 No changes to commit - automation stitches configuration is up to date"
+        else
+          commit_msg="🔗 Auto-update: Combined automation stitches configuration (${{ steps.check_files.outputs.file_count }} components)"
+          echo "Committing with message: $commit_msg"
+          git commit -m "$commit_msg"
+          git push
+          echo "✅ Combined automation stitches file committed and pushed"
+        fi
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Final verification
+      run: |
+        echo "Final check - repository contents:"
+        ls -la AUTOMATION-STITCHES.conf
+        echo ""
+        echo "Repository status:"
+        git log --oneline -5
