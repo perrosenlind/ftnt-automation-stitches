@@ -124,18 +124,15 @@ jobs:
             continue
           fi
           
-          # Read the file and process each line (NO FILE HEADER COMMENTS)
+          # Read the file and process each line
+          found_config_start=false
           while IFS= read -r line || [ -n "$line" ]; do
             echo "  Processing line: '$line'"
             
-            # Skip comment lines and empty lines
-            if echo "$line" | grep -q '^[[:space:]]*#' || echo "$line" | grep -q '^[[:space:]]*$'; then
-              echo "    -> Skipping comment/empty line"
-              continue
-            fi
-            
-            # Check if line starts with "config system automation-action"
+            # Look for the start of config system automation-action
             if echo "$line" | grep -q '^[[:space:]]*config system automation-action'; then
+              found_config_start=true
+              # Only include this line in the first file
               if [ "$is_first_file" = "true" ]; then
                 echo "    -> Adding config line (first file)"
                 echo "$line" >> "$output_file"
@@ -145,7 +142,13 @@ jobs:
               continue
             fi
             
-            # Check if line is "end" statement
+            # If we haven't found the config start yet, skip this line
+            if [ "$found_config_start" = "false" ]; then
+              echo "    -> Skipping line before config start"
+              continue
+            fi
+            
+            # After config start, handle the end statement specially
             if echo "$line" | grep -q '^[[:space:]]*end[[:space:]]*$'; then
               if [ "$is_last_file" = "true" ]; then
                 echo "    -> Adding end statement (last file)"
@@ -156,8 +159,8 @@ jobs:
               continue
             fi
             
-            # For all other lines, include them
-            echo "    -> Adding content line"
+            # For all other lines after config start, include them as-is (preserving comments, whitespace, etc.)
+            echo "    -> Adding line as-is"
             echo "$line" >> "$output_file"
             
           done < "$file"
