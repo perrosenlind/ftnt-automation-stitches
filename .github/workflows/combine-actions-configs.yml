@@ -4,15 +4,11 @@ on:
   push:
     branches: [ main, master ]
     paths:
-      - 'actions/**/*.conf'
-      - 'actions/**/*.config'
-      - 'actions/**/*.cfg'
+      - 'actions/**'  # This will trigger on ANY file change in actions folder
   pull_request:
     paths:
-      - 'actions/**/*.conf'
-      - 'actions/**/*.config'
-      - 'actions/**/*.cfg'
-  workflow_dispatch:
+      - 'actions/**'
+  workflow_dispatch:  # Allows manual trigger
 
 jobs:
   combine-config-files:
@@ -41,6 +37,21 @@ jobs:
         ls -la actions/ || echo "Actions folder doesn't exist or is empty"
         echo "Looking for config files:"
         find . -name "*.conf" -o -name "*.config" -o -name "*.cfg" || echo "No config files found anywhere"
+        
+    - name: Debug - List all files in actions folder
+      run: |
+        echo "=== ALL FILES IN ACTIONS FOLDER ==="
+        find actions -type f -name "*" | sort
+        echo ""
+        echo "=== CONFIG FILES FOUND ==="
+        find actions -name "*.conf" -o -name "*.config" -o -name "*.cfg" | grep -v "actions/ALL_ACTIONS.conf" | sort
+        echo ""
+        echo "=== CURRENT ALL_ACTIONS.conf CONTENT ==="
+        if [ -f "actions/ALL_ACTIONS.conf" ]; then
+          cat actions/ALL_ACTIONS.conf
+        else
+          echo "ALL_ACTIONS.conf does not exist yet"
+        fi
         
     - name: Scan for configuration files
       id: scan
