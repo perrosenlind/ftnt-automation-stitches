@@ -48,18 +48,18 @@ jobs:
         echo "Scanning for configuration files in actions folder..."
         
         # Count configuration files (excluding the combined file)
-        conf_count=$(find actions -name "*.conf" -o -name "*.config" -o -name "*.cfg" 2>/dev/null | grep -v "actions/COMBINED_CONFIG.conf" | wc -l)
+        conf_count=$(find actions -name "*.conf" -o -name "*.config" -o -name "*.cfg" 2>/dev/null | grep -v "actions/ALL_ACTIONS.conf" | wc -l)
         echo "Found $conf_count configuration files"
         echo "conf_count=$conf_count" >> $GITHUB_OUTPUT
         
         # List all found files
         echo "Configuration files found:"
-        find actions -name "*.conf" -o -name "*.config" -o -name "*.cfg" 2>/dev/null | grep -v "actions/COMBINED_CONFIG.conf" | sort || echo "No configuration files found"
+        find actions -name "*.conf" -o -name "*.config" -o -name "*.cfg" 2>/dev/null | grep -v "actions/ALL_ACTIONS.conf" | sort || echo "No configuration files found"
         
     - name: Generate combined configuration file
       if: steps.scan.outputs.conf_count > 0
       run: |
-        output_file="actions/COMBINED_CONFIG.conf"
+        output_file="actions/ALL_ACTIONS.conf"
         echo "Creating output file: $output_file"
         
         # Create the output file with header
@@ -84,7 +84,7 @@ jobs:
         echo "" >> "$output_file"
         
         # Process each configuration file
-        find actions -name "*.conf" -o -name "*.config" -o -name "*.cfg" 2>/dev/null | grep -v "actions/COMBINED_CONFIG.conf" | sort | while read file; do
+        find actions -name "*.conf" -o -name "*.config" -o -name "*.cfg" 2>/dev/null | grep -v "actions/ALL_ACTIONS.conf" | sort | while read file; do
           echo "Processing file: $file"
           filename=$(basename "$file")
           
@@ -109,7 +109,7 @@ jobs:
     - name: Handle no configuration files
       if: steps.scan.outputs.conf_count == 0
       run: |
-        output_file="actions/COMBINED_CONFIG.conf"
+        output_file="actions/ALL_ACTIONS.conf"
         echo "No config files found, creating placeholder"
         
         cat > "$output_file" << 'EOF'
@@ -129,11 +129,11 @@ jobs:
     - name: Verify file creation
       run: |
         echo "Checking if file was created:"
-        if [ -f "actions/COMBINED_CONFIG.conf" ]; then
+        if [ -f "actions/ALL_ACTIONS.conf" ]; then
           echo "✅ File exists!"
-          echo "File size: $(wc -l < actions/COMBINED_CONFIG.conf) lines"
+          echo "File size: $(wc -l < actions/ALL_ACTIONS.conf) lines"
           echo "File content preview:"
-          head -20 actions/COMBINED_CONFIG.conf
+          head -20 actions/ALL_ACTIONS.conf
         else
           echo "❌ File was not created!"
           exit 1
@@ -148,7 +148,7 @@ jobs:
         git status
         
         # Add the generated conf file
-        git add actions/COMBINED_CONFIG.conf
+        git add actions/ALL_ACTIONS.conf
         
         echo "Git status after adding:"
         git status
