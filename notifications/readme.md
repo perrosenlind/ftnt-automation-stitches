@@ -1,3 +1,7 @@
+# Notifications
+
+This folder contains examples of notification profile configuration. 
+
 *From the admin guide, https://docs.fortinet.com/document/fortigate/7.6.3/administration-guide/427797/variables-in-actions*
 
 ## Variables in actions
