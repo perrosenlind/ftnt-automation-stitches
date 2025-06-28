@@ -83,11 +83,14 @@ jobs:
         echo "# ============================================================================" >> "$output_file"
         echo "" >> "$output_file"
         
+        # Get total file count first
+        total_files=$(find actions -name "*.conf" -o -name "*.config" -o -name "*.cfg" 2>/dev/null | grep -v "actions/ALL_ACTIONS.conf" | wc -l)
+        
         # Process each configuration file
         file_counter=0
         find actions -name "*.conf" -o -name "*.config" -o -name "*.cfg" 2>/dev/null | grep -v "actions/ALL_ACTIONS.conf" | sort | while read file; do
           file_counter=$((file_counter + 1))
-          echo "Processing file: $file (file #$file_counter)"
+          echo "Processing file: $file (file #$file_counter of $total_files)"
           filename=$(basename "$file")
           
           echo "" >> "$output_file"
@@ -100,6 +103,7 @@ jobs:
           temp_file=$(mktemp)
           in_config_block=false
           is_first_file=$([ $file_counter -eq 1 ] && echo "true" || echo "false")
+          is_last_file=$([ $file_counter -eq $total_files ] && echo "true" || echo "false")
           
           while IFS= read -r line; do
             # Check if line starts with "config system automation-action"
@@ -118,7 +122,10 @@ jobs:
               echo "$line" >> "$temp_file"
             # Check if we're at the end of a config block
             elif echo "$line" | grep -q '^[[:space:]]*end[[:space:]]*$' && [ "$in_config_block" = true ]; then
-              echo "$line" >> "$temp_file"
+              # Only keep "end" in the last file for automation-action blocks
+              if [ "$is_last_file" = "true" ]; then
+                echo "$line" >> "$temp_file"
+              fi
               in_config_block=false
             # If we're inside a config block, keep everything (including whitespace lines)
             elif [ "$in_config_block" = true ]; then
